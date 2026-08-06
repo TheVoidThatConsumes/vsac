@@ -15,6 +15,9 @@ digest = ["pynacl"]
 [project.scripts]
 vsac = "vsac.cli:main"
 
+[tool.hatch.build.targets.wheel]
+packages = ["vsac"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
