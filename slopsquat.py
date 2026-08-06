@@ -51,6 +51,25 @@ def days_since(date_str: Optional[str]) -> Optional[int]:
         return None
     try:
         dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            # DEVIATION FROM DIRECT PORT, flagged deliberately: xbom's
+            # original main.py (line ~1145) reads PyPI's "upload_time"
+            # field, which has no timezone suffix (e.g.
+            # "2020-01-01T00:00:00", no trailing Z). fromisoformat()
+            # then produces a naive datetime, the subtraction against
+            # datetime.now(timezone.utc) below raises TypeError, and
+            # xbom's bare `except Exception` silently swallows it --
+            # days_since() returns None and the STALE check never fires,
+            # for every PyPI package, always. Confirmed present in
+            # xbom's real source, not introduced by this port.
+            #
+            # Left as a silent no-op, this violates the project's own
+            # fail-closed principle (DECISIONS.md) more than it honors
+            # "port with zero drift" -- a security signal that never
+            # fires is worse than a small, flagged deviation. PyPI's
+            # naive timestamps are UTC by convention, so we assume UTC
+            # here rather than leave the comparison broken.
+            dt = dt.replace(tzinfo=timezone.utc)
         return (datetime.now(timezone.utc) - dt).days
     except Exception:
         return None
