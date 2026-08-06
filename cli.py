@@ -158,7 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("target", help="requirements.txt, package.json/Cargo.toml dir, or project dir")
+    common.add_argument("target", nargs="?", default=".",
+                         help="requirements.txt, package.json/Cargo.toml dir, or project dir (default: current directory)")
     common.add_argument("--ecosystem", choices=["PyPI", "npm", "rust"], default=None,
                          help="Force ecosystem instead of auto-detecting from target")
     common.add_argument("--cache-dir", default=None, help="Override cache directory")
