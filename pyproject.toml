@@ -1,0 +1,20 @@
+[project]
+name = "vsac-cli"
+version = "0.1.0"
+description = "Venom-Sac — Gossamer Suite dependency risk scanner"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "jsonschema>=4.20,<5.0",
+]
+
+[project.optional-dependencies]
+refresh = ["requests"]
+digest = ["pynacl"]
+
+[project.scripts]
+vsac = "vsac.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
