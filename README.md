@@ -14,7 +14,7 @@ Dependency vulnerability scanning, SBOM generation, and threat correlation for t
 
 ## Overview
 
-VSac scans a project's dependencies for known vulnerabilities, generates a software bill of materials, and (optionally) correlates findings against a signed threat intelligence feed. It is the only Gossamer suite member that legitimately needs the network. CVE and registry data goes stale — but it never makes that tradeoff silently or mid-scan.
+VSac scans a project's dependencies for known vulnerabilities, generates a software bill of materials, and (optionally) correlates findings against a signed threat intelligence feed. It is the only Gossamer suite member that legitimately needs the network. CVE and registry data goes stale, but it never makes that tradeoff silently or mid-scan.
 
 VSac is split into three commands, each with a single responsibility:
 
@@ -24,7 +24,7 @@ vsac scan       evaluates dependencies against the local cache — zero network 
 vsac digest     correlates cached findings against KEV / OSSF signals via a signed snapshot — opt-in
 ```
 
-This split exists because `scan` is a pure, offline, deterministic function of what's on disk. It cannot make a live API call per package, interleaved with the rest of the scan logic — that would mean CI runs are only as reliable as an upstream registry's uptime, and it would mean two runs against the same commit could produce different findings depending on when they happened to run. `refresh` is the only place staleness enters the picture, and it enters explicitly, on request.
+This split exists because `scan` is a pure, offline, deterministic function of what's on disk. It cannot make a live API call per package, interleaved with the rest of the scan logic, which means that CI runs are only as reliable as an upstream registry's uptime, and two runs against the same commit could produce different findings depending on when they happened to run. `refresh` is the only place staleness enters the picture explicitly, on request.
 
 ---
 
