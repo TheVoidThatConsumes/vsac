@@ -1,6 +1,6 @@
 # VSac
 
-Dependency vulnerability scanning, SBOM generation, and threat correlation for the [Gossamer Suite](https://github.com/TheVoidThatConsumes/gossamer-suite) — with a hard line between "fetch data" and "evaluate data" so scans stay offline and deterministic by default.
+Dependency vulnerability scanning, SBOM generation, and threat correlation for the [Gossamer Suite](https://github.com/TheVoidThatConsumes/gossamer-suite) with a hard line between "fetch data" and "evaluate data" so scans stay offline and deterministic by default.
 
 | | |
 |---|---|
@@ -14,7 +14,7 @@ Dependency vulnerability scanning, SBOM generation, and threat correlation for t
 
 ## Overview
 
-VSac scans a project's dependencies for known vulnerabilities, generates a software bill of materials, and (optionally) correlates findings against a signed threat intelligence feed. It is the one Gossamer suite member that legitimately needs the network — CVE and registry data goes stale — but it never makes that tradeoff silently or mid-scan.
+VSac scans a project's dependencies for known vulnerabilities, generates a software bill of materials, and (optionally) correlates findings against a signed threat intelligence feed. It is the only Gossamer suite member that legitimately needs the network. CVE and registry data goes stale — but it never makes that tradeoff silently or mid-scan.
 
 VSac is split into three commands, each with a single responsibility:
 
@@ -38,7 +38,7 @@ vsac digest                   # correlate cached findings against the signed thr
 vsac audit                    # generate SBOM → refresh → scan → digest, end to end
 ```
 
-`vsac scan` never fails open on missing data. A dependency with no matching cache entry — never refreshed, or newly added since the last `refresh` — produces an explicit `inconclusive` finding rather than being silently treated as clean. The scan's exit code reflects this: any inconclusive findings are a soft-fail, distinct from a clean pass, so CI surfaces "you need to run `refresh`" instead of quietly passing on incomplete data.
+`vsac scan` never fails open on missing data. A dependency with no matching cache entry (never refreshed, or newly added since the last `refresh`) produces an explicit `inconclusive` finding rather than being silently treated as clean. The scan's exit code reflects this: any inconclusive findings are a soft-fail, distinct from a clean pass, so CI surfaces "you need to run `refresh`" instead of quietly passing on incomplete data.
 
 ```bash
 vsac refresh && vsac scan --gate HIGH --json | jq -e '.summary.CRITICAL == 0'
@@ -48,13 +48,13 @@ vsac refresh && vsac scan --gate HIGH --json | jq -e '.summary.CRITICAL == 0'
 
 ## Cache and staleness
 
-`vsac refresh` is the only command that writes to the local cache, and the only command in VSac that touches the network for CVE/registry lookups. There is no per-scan fallback to a live API call, by design — see [DECISIONS.md](./DECISIONS.md).
+`vsac refresh` is the only command that writes to the local cache, and the only command in VSac that touches the network for CVE/registry lookups. There is no per-scan fallback to a live API call by design.
 
 This means:
 
-- **Outdated-version detection** compares a dependency against "latest as of the last `refresh`," not real-time registry state. An `OUTDATED` finding can itself be stale if the cache hasn't been refreshed recently — check `vsac refresh`'s last-run timestamp, surfaced in every scan report, before treating an `OUTDATED` flag as current.
+- **Outdated-version detection** compares a dependency against "latest as of the last `refresh`," not real-time registry state. An `OUTDATED` finding can itself be stale if the cache hasn't been refreshed recently. Check `vsac refresh`'s last-run timestamp, surfaced in every scan report, before treating an `OUTDATED` flag as current.
 - **CVE coverage** reflects OSV (and ecosystem registries) as of the last `refresh`, not the moment `scan` ran.
-- A CI pipeline that runs `vsac scan` without ever running `vsac refresh` will get `inconclusive` findings for everything and a non-zero exit — this is intentional, not a bug to route around.
+- A CI pipeline that runs `vsac scan` without ever running `vsac refresh` will get `inconclusive` findings for everything and a non-zero exit. This is intentional, not a bug to route around.
 
 ---
 
