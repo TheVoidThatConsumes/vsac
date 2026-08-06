@@ -60,9 +60,9 @@ This means:
 
 ## Digest mode
 
-`vsac digest` is VSac's second and final network touchpoint. It pulls a signed, offline-verifiable snapshot from [gossamer-threat-feed](https://github.com/TheVoidThatConsumes/gossamer-threat-feed) (Ed25519-signed, fail-closed, verified on every read) and correlates it against cached CVE data — surfacing which known vulnerabilities are under active exploitation (CISA KEV) or otherwise elevated, and computing a `risk_score` per finding.
+`vsac digest` is VSac's second and final network touchpoint. It pulls a signed, offline-verifiable snapshot from [gossamer-threat-feed](https://github.com/TheVoidThatConsumes/gossamer-threat-feed) (Ed25519-signed, fail-closed, verified on every read) and correlates it against cached CVE data, surfacing which known vulnerabilities are under active exploitation (CISA KEV) or otherwise elevated, and computing a `risk_score` per finding.
 
-`digest` is a generic client of gossamer-threat-feed's signed-snapshot protocol; gossamer-threat-feed itself has no dependency on VSac and can be consumed standalone.
+`digest` is a generic client of gossamer-threat-feed's signed-snapshot protocol. gossamer-threat-feed itself has no dependency on VSac and can be consumed standalone.
 
 ---
 
@@ -73,12 +73,12 @@ VSac findings conform to Gossamer's shared [finding-envelope schema](https://git
 | Category | Description |
 |---|---|
 | `known-vulnerability` | Dependency has a published CVE |
-| `actively-exploited` | Vulnerability confirmed under active exploitation (e.g. CISA KEV) — digest mode only |
+| `actively-exploited` | Vulnerability confirmed under active exploitation (e.g. CISA KEV) [digest mode only] |
 | `malicious-package` | Package confirmed malicious or part of a known campaign |
 | `slopsquatting` | Package name matches a common AI-hallucinated dependency pattern |
 | `license-conflict` | Dependency license conflicts with declared project license |
 
-`risk_score` and `source` are VSac-specific extension fields, permitted by the schema's open `additionalProperties`, and must not be relied on by generic suite tooling (`gossamer audit`, Web) — only by VSac-aware consumers.
+`risk_score` and `source` are VSac-specific extension fields permitted by the schema's open `additionalProperties` and must not be relied on by generic suite tooling (`gossamer audit`, Web), only by VSac-aware consumers.
 
 ---
 
