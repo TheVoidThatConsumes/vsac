@@ -37,11 +37,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from . import cache, slopsquat
+from . import cache, cvss, slopsquat
 
 
 def _extract_cve_findings(vulns: list) -> list[dict]:
     findings = []
+    seen_cve_ids = set()
+
     for v in vulns:
         if not isinstance(v, dict):
             findings.append({
@@ -52,21 +54,19 @@ def _extract_cve_findings(vulns: list) -> list[dict]:
 
         aliases = v.get("aliases", [v.get("id", "?")])
         cve_id = next((a for a in aliases if a.startswith("CVE-")), v.get("id", "?"))
-        severity = "unknown"
-        fixed_ver = "see advisory"
 
-        for sev_entry in v.get("severity", []):
-            if not isinstance(sev_entry, dict):
-                continue
-            score = sev_entry.get("score", "").upper()
-            if "CRITICAL" in score:
-                severity = "critical"
-            elif "HIGH" in score:
-                severity = "high"
-            elif "MEDIUM" in score:
-                severity = "medium"
-            elif "LOW" in score:
-                severity = "low"
+        # Dedupe by CVE ID: OSV can legitimately return the same CVE
+        # more than once for a single query (e.g. matched via multiple
+        # affected ranges, or aliased under more than one advisory id
+        # that both resolve to the same CVE). Whatever the upstream
+        # cause, the same CVE for the same package/version must never
+        # produce two separate findings.
+        if cve_id in seen_cve_ids:
+            continue
+        seen_cve_ids.add(cve_id)
+
+        severity = cvss.severity_for_vuln(v)
+        fixed_ver = "see advisory"
 
         for affected in v.get("affected", []):
             if not isinstance(affected, dict):

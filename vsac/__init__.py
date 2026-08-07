@@ -10,10 +10,11 @@ __all__ below rather than listed-but-absent.
 """
 
 from . import cache
+from . import cvss
 from . import scan
 from . import slopsquat
 from . import parsers
 from . import schema
 from . import cli
 
-__all__ = ["cache", "scan", "slopsquat", "parsers", "schema", "cli"]
+__all__ = ["cache", "cvss", "scan", "slopsquat", "parsers", "schema", "cli"]
