@@ -1,23 +1,41 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "vsac-cli"
+name = "vsac"
 version = "0.1.0"
-description = "Venom-Sac — Gossamer Suite dependency risk scanner"
-requires-python = ">=3.12"
-license = { text = "Apache-2.0" }
+description = "Venom-Sac — dependency risk scanner for the Gossamer Suite (CVE, slopsquatting; SBOM/digest tier not yet implemented)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "TheVoidThatConsumes" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
 dependencies = [
-    "jsonschema>=4.20,<5.0",
+    "requests>=2.31,<3",
 ]
 
 [project.optional-dependencies]
-refresh = ["requests"]
-digest = ["pynacl"]
+dev = [
+    "pytest>=8.0",
+    "jsonschema>=4.0",
+]
 
 [project.scripts]
 vsac = "vsac.cli:main"
 
-[tool.hatch.build.targets.wheel]
-packages = ["vsac"]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.setuptools.packages.find]
+include = ["vsac*"]
+exclude = ["tests*"]
