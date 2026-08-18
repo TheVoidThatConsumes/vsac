@@ -64,10 +64,19 @@ def _detect_packages(target: str, ecosystem: Optional[str]) -> tuple[list[tuple[
         req = path / "requirements.txt"
         if req.exists():
             return parsers.parse_requirements(req), "PyPI"
+        pyproject = path / "pyproject.toml"
+        if pyproject.exists():
+            # May raise parsers.UnsupportedManifestError (Poetry-style) --
+            # deliberately NOT caught here. cmd_scan/cmd_refresh handle it
+            # differently from ParseError: ParseError below means "nothing
+            # recognized at all," UnsupportedManifestError means "VSac
+            # knows exactly what this is and is declining to parse it,"
+            # which routes through the --json envelope, not a bare exit 2.
+            return parsers.parse_pyproject(path), "PyPI"
         raise parsers.ParseError(
             f"No recognized dependency file found under {target} "
-            f"(looked for requirements.txt, package-lock.json/package.json, Cargo.lock/Cargo.toml). "
-            f"Use --ecosystem to force one."
+            f"(looked for requirements.txt, pyproject.toml, package-lock.json/package.json, "
+            f"Cargo.lock/Cargo.toml). Use --ecosystem to force one."
         )
 
     raise parsers.ParseError(f"Path not found: {target}")
@@ -78,6 +87,12 @@ def cmd_refresh(args: argparse.Namespace) -> int:
 
     try:
         packages, ecosystem = _detect_packages(args.target, args.ecosystem)
+    except parsers.UnsupportedManifestError as e:
+        # refresh has no --json envelope contract to honor (unlike scan) --
+        # it's a network op with nothing to fetch, so this stays a plain
+        # usage-style failure. Not the case this fix targets; see cmd_scan.
+        print(f"[!] {e}", file=sys.stderr)
+        return 2
     except parsers.ParseError as e:
         print(f"[!] {e}", file=sys.stderr)
         return 2
@@ -106,6 +121,8 @@ def cmd_refresh(args: argparse.Namespace) -> int:
 def cmd_scan(args: argparse.Namespace) -> int:
     try:
         packages, ecosystem = _detect_packages(args.target, args.ecosystem)
+    except parsers.UnsupportedManifestError as e:
+        return _emit_unsupported_manifest(args, e)
     except parsers.ParseError as e:
         print(f"[!] {e}", file=sys.stderr)
         return 2
@@ -138,6 +155,44 @@ def cmd_scan(args: argparse.Namespace) -> int:
         return 1
 
     return 0
+
+
+def _emit_unsupported_manifest(args: argparse.Namespace, err: "parsers.UnsupportedManifestError") -> int:
+    """
+    Handle a recognized-but-declined manifest (currently: Poetry-style
+    pyproject.toml) through the normal --json envelope path instead of a
+    bare exit 2. Per DECISIONS.md's manifest-format-coverage addendum:
+    this is a lookup-error (MEDIUM), not a coverage-gap -- coverage-gap's
+    locked definition is specifically "package not in cache," a
+    cache-completeness concept, and reusing it here would blur that
+    category's meaning. There is exactly one synthetic finding, scoped
+    to the manifest itself rather than any individual package, since no
+    packages were ever extracted to scan.
+
+    Exit is non-zero (1) regardless of --gate/severity policy, mirroring
+    coverage-gap's "the scan could not meaningfully run" treatment even
+    though the category is different -- an unscanned repo must never
+    report a clean/zero exit.
+    """
+    target_label = str(Path(args.target).resolve())
+    synthetic_result = {
+        "name": Path(args.target).name or args.target,
+        "version": None,
+        "findings": [{"type": "lookup_error", "detail": str(err)}],
+    }
+    report = schema.build_report([synthetic_result], repo=target_label, ecosystem="PyPI")
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        _print_human(report)
+        print(
+            f"\n[!] Manifest recognized but not parseable by VSac (see finding above) -- "
+            f"exiting non-zero (fail-closed): this repo was not actually scanned.",
+            file=sys.stderr,
+        )
+
+    return 1
 
 
 def _print_human(report: dict) -> None:

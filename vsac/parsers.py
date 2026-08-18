@@ -30,6 +30,23 @@ class ParseError(Exception):
     """Raised on an unreadable or misidentified dependency file."""
 
 
+class UnsupportedManifestError(Exception):
+    """
+    Raised when a manifest is correctly identified but its dependency
+    section uses a format VSac deliberately does not parse (currently:
+    Poetry's [tool.poetry.dependencies]).
+
+    Deliberately NOT a subclass of ParseError. ParseError means "there is
+    nothing to scan here" and callers (cli.py) exit 2 without attempting
+    --json output, per the pre-existing usage/parse-error contract.
+    UnsupportedManifestError means the opposite: VSac recognizes exactly
+    what this is and is choosing not to parse it -- that's real
+    information the caller should surface as a normal lookup-error
+    finding through the standard --json envelope path, not a crash.
+    See DECISIONS.md's manifest-format-coverage addendum.
+    """
+
+
 # Signatures that only ever appear in xbom's own printed/exported output,
 # never in a genuine requirements.txt. Used by looks_like_xbom_report() to
 # guard against a report file being accidentally re-fed into parse_requirements.
@@ -108,6 +125,110 @@ def parse_requirements(req_file) -> list[tuple[str, Optional[str]]]:
                 packages.append((name.group(1).lower(), None))
 
     return packages
+
+
+def _parse_pep508_dep(dep_str: str) -> Optional[tuple[str, Optional[str]]]:
+    """
+    Extract (name, version) from a single PEP 508 dependency-specifier
+    string, e.g. "requests>=2.31,<3" or "pytest==8.0.0" or
+    "foo[extra]>=1 ; python_version >= '3.11'".
+
+    version is the exact pin only (an "==" clause) -- same convention as
+    parse_requirements. A range-only spec ("requests>=2.31,<3") yields
+    version=None, exactly as an unpinned requirements.txt line would.
+    Environment markers (after ";") and extras ("[extra]") are stripped
+    since neither affects which package/version is actually installed.
+    """
+    dep_str = dep_str.split(";", 1)[0].strip()
+    dep_str = re.sub(r"\[[^\]]*\]", "", dep_str)  # drop extras, e.g. "foo[extra]" -> "foo"
+
+    m = re.match(r"^([A-Za-z0-9_.\-]+)", dep_str)
+    if not m:
+        return None
+    name = m.group(1).lower()
+
+    pin = re.search(r"==\s*([A-Za-z0-9_.\-]+)", dep_str[len(m.group(1)):])
+    version = pin.group(1) if pin else None
+    return (name, version)
+
+
+def parse_pyproject(project_path) -> list[tuple[str, Optional[str]]]:
+    """
+    Return a list of (name, version) tuples from a PEP 621
+    [project.dependencies] array.
+
+    Scope, locked (see DECISIONS.md manifest-format-coverage addendum):
+      - PEP 621 [project.dependencies]: parsed. This is a fixed, bounded
+        spec -- an array of PEP 508 strings -- not an open-ended format.
+      - Poetry's [tool.poetry.dependencies]: recognized but NOT parsed.
+        Its version-constraint syntax (^1.2.3, ~1.2) is not PEP
+        508-compatible; parsing it correctly is separate scope.
+        Raises UnsupportedManifestError rather than silently returning
+        [] or crashing -- "declined" is a stated position, not silence.
+      - Anything else (no [project.dependencies], no [tool.poetry]):
+        raises ParseError -- there is nothing here VSac recognizes at
+        all, same category as a missing/unreadable requirements.txt.
+
+    [project.optional-dependencies] is deliberately NOT parsed in this
+    pass -- flagged as a natural, separate follow-up rather than folded
+    in opportunistically (same DECISIONS.md-style caution against
+    scope creep that applies to Poetry).
+    """
+    try:
+        import tomllib
+    except ImportError:
+        tomllib = None
+
+    path = Path(project_path)
+    pyproject_path = path / "pyproject.toml" if path.is_dir() else path
+
+    if not pyproject_path.exists():
+        raise ParseError(f"File not found: {pyproject_path}")
+
+    if tomllib is None:
+        raise ParseError(
+            f"Cannot parse {pyproject_path}: Python < 3.11 has no built-in TOML parser "
+            f"(tomllib), and VSac does not add a third-party TOML dependency for this."
+        )
+
+    try:
+        raw_text = pyproject_path.read_text(encoding="utf-8")
+    except (OSError, PermissionError) as e:
+        raise ParseError(f"Could not read {pyproject_path}: {e}")
+
+    try:
+        data = tomllib.loads(raw_text)
+    except tomllib.TOMLDecodeError as e:
+        raise ParseError(f"Could not parse {pyproject_path} as TOML: {e}")
+
+    project = data.get("project", {})
+    deps = project.get("dependencies")
+
+    if deps:
+        packages = []
+        for dep in deps:
+            if not isinstance(dep, str):
+                continue
+            parsed = _parse_pep508_dep(dep)
+            if parsed:
+                packages.append(parsed)
+        return packages
+
+    if "poetry" in data.get("tool", {}):
+        raise UnsupportedManifestError(
+            f"{pyproject_path} declares dependencies via [tool.poetry.dependencies] "
+            f"(Poetry), which VSac recognizes but does not parse -- Poetry's "
+            f"version-constraint syntax (^1.2.3, ~1.2) is not PEP 508-compatible. "
+            f"This is a declined manifest format, not an unsupported one; see "
+            f"DECISIONS.md. Convert to PEP 621 [project.dependencies], or run "
+            f"'vsac scan --ecosystem PyPI requirements.txt' against an exported "
+            f"requirements file instead."
+        )
+
+    raise ParseError(
+        f"{pyproject_path} has neither [project.dependencies] (PEP 621) nor "
+        f"[tool.poetry.dependencies] (Poetry) -- VSac found nothing recognizable to scan."
+    )
 
 
 def parse_npm_project(project_path) -> list[tuple[str, Optional[str]]]:
