@@ -3,10 +3,10 @@
 Dependency risk scanner for the [Gossamer Suite](https://github.com/TheVoidThatConsumes/gossamer-suite).
 
 > **Status: early / 0.x.** VSac's local-scan tier (CVE scanning + slopsquatting
-> detection) is implemented and tested. **SBOM generation, the digest tier
-> (KEV/OSSF correlation, composite risk scoring), and license-compliance
+> detection) and SBOM export are implemented and tested. **The digest tier
+> (KEV/OSSF correlation, composite risk scoring) and license-compliance
 > checking are not yet implemented.** See [Roadmap](#roadmap) below before
-> depending on this for anything beyond CVE/slopsquat scanning.
+> depending on this for anything beyond CVE/slopsquat scanning and SBOM export.
 
 ## What it does today
 
@@ -16,6 +16,11 @@ Dependency risk scanner for the [Gossamer Suite](https://github.com/TheVoidThatC
 - `vsac scan <target>` — evaluates cached data and reports findings.
   **Never makes a network call**, by design — see
   [Design](#design-network-isolation) below.
+- `vsac sbom <target> [--format cyclonedx|spdx]` — emits an SBOM
+  (CycloneDX 1.7 or SPDX 2.3, both current official spec versions) from
+  the dependency manifest, printed as JSON on stdout. **Never makes a
+  network call**: license fields are best-effort enrichment from the
+  refresh cache only, so a BOM works even before `refresh` has run.
 
 Findings cover:
 - **Known CVEs** (via [OSV](https://osv.dev)), with real CVSS-derived severity
@@ -36,6 +41,8 @@ pip install vsac
 # package-lock.json, or Cargo.toml/Cargo.lock):
 vsac refresh .
 vsac scan .
+vsac sbom .                          # CycloneDX 1.7 JSON on stdout
+vsac sbom requirements.txt --format spdx   # or SPDX 2.3
 
 # Or point at a specific file:
 vsac refresh requirements.txt
@@ -43,7 +50,9 @@ vsac scan requirements.txt --json
 ```
 
 Exit codes: `0` clean, `1` a `coverage-gap` finding or a CRITICAL/HIGH
-severity finding is present, `2` usage/parse error. See `DECISIONS.md`
+severity finding is present, `2` usage/parse error (`sbom` is `0` on
+success / `2` on manifest error — its stdout is the BOM, not a finding
+envelope). See `DECISIONS.md`
 in the [gossamer-suite](https://github.com/TheVoidThatConsumes/gossamer-suite)
 repo for the full rationale.
 
@@ -58,12 +67,12 @@ pulled in when `refresh` is explicitly invoked.
 ## Roadmap
 
 Per the Gossamer Suite's design ledger, in order:
-1. ~~Local CVE scanning (OSV-derived local cache)~~ done — SBOM
-   generation still outstanding
+1. ~~Local CVE scanning (OSV-derived local cache)~~ done
 2. ~~Slopsquatting detection~~ done
-3. Digest tier: CISA KEV + OSSF Malicious Packages correlation,
+3. ~~SBOM generation (CycloneDX 1.7 / SPDX 2.3)~~ done
+4. Digest tier: CISA KEV + OSSF Malicious Packages correlation,
    composite risk scoring, `--explain-score`
-4. License compliance (advisory-only)
+5. License compliance (advisory-only)
 
 ## Credit
 

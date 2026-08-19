@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import cache, parsers, scan, schema
+from . import cache, parsers, sbom, scan, schema
 
 _ECOSYSTEM_FILES = {
     "PyPI": ("requirements.txt",),
@@ -157,6 +157,34 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sbom(args: argparse.Namespace) -> int:
+    """
+    Emit a CycloneDX 1.7 or SPDX 2.3 BOM from the dependency manifest.
+
+    Data-export command, not a findings-report path: stdout is the BOM
+    document itself, so the "--json emits a finding envelope" rule does
+    not apply here. No cache requirement and no network: registry
+    metadata (licenses) is best-effort enrichment from the refresh
+    cache only. Exit codes: 0 on success, 2 on manifest/usage errors.
+    """
+    try:
+        packages, ecosystem = _detect_packages(args.target, args.ecosystem)
+    except (parsers.ParseError, parsers.UnsupportedManifestError) as e:
+        print(f"[!] {e}", file=sys.stderr)
+        return 2
+
+    if not packages:
+        print(f"[!] No packages found in {args.target}", file=sys.stderr)
+        return 2
+
+    target = Path(args.target)
+    product_name = target.name if target.is_dir() else target.stem
+    doc = sbom.build_sbom(packages, ecosystem=ecosystem, product_name=product_name,
+                          fmt=args.format, cache_dir=args.cache_dir)
+    print(json.dumps(doc, indent=2))
+    return 0
+
+
 def _emit_unsupported_manifest(args: argparse.Namespace, err: "parsers.UnsupportedManifestError") -> int:
     """
     Handle a recognized-but-declined manifest (currently: Poetry-style
@@ -231,6 +259,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan = sub.add_parser("scan", parents=[common], help="Evaluate packages against local cache only (no network)")
     p_scan.add_argument("--json", action="store_true", help="Emit finding-envelope-conformant JSON instead of human output")
     p_scan.set_defaults(func=cmd_scan)
+
+    p_sbom = sub.add_parser("sbom", parents=[common],
+                            help="Emit a CycloneDX 1.7 or SPDX 2.3 SBOM from the dependency manifest (no network)")
+    p_sbom.add_argument("--format", choices=["cyclonedx", "spdx"], default="cyclonedx",
+                        help="SBOM format (default: cyclonedx)")
+    p_sbom.set_defaults(func=cmd_sbom)
 
     return parser
 

@@ -132,8 +132,49 @@ for PyPI's naive timestamps instead of leaving the comparison broken.
 
 ## 10. Not implemented (future scope)
 
-SBOM generation and the digest tier are not implemented. The digest
-tier, when it ships, is the second place allowed to touch the network
-(`refresh.py` module docstring names it as such).
+The digest tier is not implemented. When it ships, it is the second
+place allowed to touch the network (`refresh.py` module docstring names
+it as such).
 
-- Source: README ("SBOM generation, the digest tier" — planned).
+## 11. SBOM generation (`vsac sbom`)
+
+Shipped as a data-export command in the same offline-first posture as
+`scan` — a port of xbom's `build_sbom` that fixes its one structural
+violation (live per-package registry enrichment) and modernizes its
+formats:
+
+- **Offline-only, cache-backed license enrichment.** xbom's builder
+  called `fetch_npm_registry` / `fetch_crates_registry` /
+  `resolve_package` live while assembling the BOM. VSac's builder reads
+  only the refresh cache: `cache.get_entry(...).registry_meta` is the
+  sole license source. A missing or failed entry yields a component
+  with no license fields — never a synthetic "unknown", and never a
+  failed BOM because refresh hasn't run yet. `sbom.py` imports nothing
+  that touches the network.
+- **Formats: CycloneDX 1.7 + SPDX 2.3**, both validated against the
+  official schemas. CycloneDX 1.7 is the current spec version (the
+  legacy flat `tools` array form is deprecated; the modern
+  `tools.components` form is emitted, `serialNumber` in the required
+  `urn:uuid:` form). SPDX 2.3 is the widely-consumed JSON SPDX format
+  (`filesAnalyzed: false`, purl `externalRefs` with
+  `referenceCategory: PACKAGE-MANAGER`). SPDX 3.x JSON is noted but not
+  emitted: 2.3 remains the format the tooling/consumer ecosystem
+  accepts. Both formats are named in EU CRA (Regulation (EU) 2024/2847,
+  Article 13 / Annex I) guidance for machine-readable SBOMs.
+- **CRA minimum coverage = top-level dependencies.** The manifest
+  parsers produce exactly that, so every component is `scope:
+  "required"` (CycloneDX) / `DEPENDS_ON` from the root package (SPDX).
+  No transitive-resolution attempt — same scope line as the parsers.
+- **stdout IS the BOM; no envelope contract.** Unlike `scan --json`,
+  which emits a finding envelope, `sbom`'s stdout is the document
+  itself, so the "--json emits a finding envelope" rule does not apply
+  (cli.py module docstring). No SBOMs/ directory, no history file —
+  xbom's file-writing side effects were dropped; piping stdout is the
+  contract.
+- **Exit codes: 0 success, 2 manifest/usage error** (message on stderr,
+  no partial BOM ever printed — same shape as `refresh`'s parse-error
+  path, including a declined Poetry manifest).
+
+- Enforcing sites: `sbom.py` (module docstring, `_purl`, `_cached_license`),
+  `cli.py` (`cmd_sbom`), `__init__.py` (sbom imported eagerly — it is
+  offline-safe, unlike `refresh`).

@@ -14,7 +14,8 @@ from . import cvss
 from . import scan
 from . import slopsquat
 from . import parsers
+from . import sbom
 from . import schema
 from . import cli
 
-__all__ = ["cache", "cvss", "scan", "slopsquat", "parsers", "schema", "cli"]
+__all__ = ["cache", "cvss", "scan", "slopsquat", "parsers", "sbom", "schema", "cli"]
