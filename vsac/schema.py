@@ -9,14 +9,9 @@ coverage-gap) that don't match the envelope's required
 id/severity/category/title/location shape. This module is the only
 place that boundary gets crossed.
 
-KNOWN GAP, flagged rather than silently worked around: categories.json
-(the controlled vocabulary) needs four new slugs added before this
-ships for real -- confirmed and locked (see DECISIONS.md):
-
-    dependency-outdated   (supply chain / OUTDATED)
-    dependency-stale       (supply chain / STALE)
-    lookup-error            (refresh-time fetch failure, recorded in cache)
-    coverage-gap            (no cache entry at all)
+The four advisory category slugs below are registered in the controller's
+categories.json (dependency-outdated, dependency-stale, lookup-error,
+coverage-gap) -- locked, see DECISIONS.md.
 
 SEVERITY ON ADVISORY FINDINGS: known-vulnerability derives its severity
 straight from cached OSV data. The other four categories have no CVE
@@ -103,16 +98,37 @@ def _severity_for(finding: dict) -> str:
     """
     coverage-gap is not on the severity scale at all per DECISIONS.md --
     it gets INFO purely to satisfy the schema's required field, and
-    consuming code must key exclusion logic off `category`, never off
-    this value. lookup-error similarly isn't a vulnerability finding,
-    but per the locked severity-default table it gets a real severity
-    (MEDIUM) rather than being INFO-only, since it blocks a real
-    assessment and shouldn't be ignorable as pure noise.
+    consuming code must key exclusion logic off the envelope's
+    non_scored flag (set in to_findings), never off this value.
+    lookup-error similarly isn't a vulnerability finding, but per the
+    locked severity-default table it gets a real severity (MEDIUM)
+    rather than being INFO-only, since it blocks a real assessment and
+    shouldn't be ignorable as pure noise.
     """
     if finding["type"] == "CVE":
         return _SEVERITY_MAP.get(finding.get("severity", "unknown"), "INFO")
     category = _category_for(finding)
     return _ADVISORY_SEVERITY.get(category, "INFO")
+
+
+def _is_non_scored(finding: dict) -> bool:
+    """True for findings that must not participate in the severity gate.
+
+    coverage-gap: the package was never evaluated at all (no cache
+    entry). Scoring it as INFO would let an unevaluated repo pass the
+    gate -- fail closed instead, exactly like the controller's
+    gate_passed() non_scored rule (see DECISIONS.md).
+
+    lookup_error + declined_manifest: the manifest was skipped by
+    policy (unsupported type), so the package was never assessed. A
+    lookup_error from a real refresh failure stays scored (MEDIUM) --
+    that's a cache-health warning about a package we DID assess.
+    """
+    if finding["type"] == "coverage-gap":
+        return True
+    if finding["type"] == "lookup_error":
+        return bool(finding.get("declined_manifest"))
+    return False
 
 
 def _title_for(finding: dict, name: str, version: Optional[str]) -> str:
@@ -176,6 +192,8 @@ def to_findings(scan_results: list[dict], ecosystem: str = "PyPI") -> list[dict]
                 "description": f.get("detail", ""),
                 "location": _location_for(name, version, ecosystem),
             }
+            if _is_non_scored(f):
+                envelope_finding["non_scored"] = True
             out.append(envelope_finding)
 
     return out

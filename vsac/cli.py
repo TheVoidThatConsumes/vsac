@@ -173,12 +173,18 @@ def _emit_unsupported_manifest(args: argparse.Namespace, err: "parsers.Unsupport
     coverage-gap's "the scan could not meaningfully run" treatment even
     though the category is different -- an unscanned repo must never
     report a clean/zero exit.
+
+    The declined_manifest marker is what distinguishes this synthetic
+    finding from a real refresh-failure lookup_error in schema.py: it
+    makes the finding non_scored (fail-closed in the controller's gate),
+    because the manifest was refused by policy and no real assessment
+    happened -- unlike a network lookup error, which is scored MEDIUM.
     """
     target_label = str(Path(args.target).resolve())
     synthetic_result = {
         "name": Path(args.target).name or args.target,
         "version": None,
-        "findings": [{"type": "lookup_error", "detail": str(err)}],
+        "findings": [{"type": "lookup_error", "detail": str(err), "declined_manifest": True}],
     }
     report = schema.build_report([synthetic_result], repo=target_label, ecosystem="PyPI")
 
