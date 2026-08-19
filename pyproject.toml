@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vsac"
-version = "0.1.0"
+version = "0.2.0"
 description = "Venom-Sac — dependency risk scanner for the Gossamer Suite (CVE, slopsquatting; SBOM/digest tier not yet implemented)"
 readme = "README.md"
 requires-python = ">=3.10"
